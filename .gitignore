@@ -1,0 +1,133 @@
+# ============================================================
+# Segredos - NUNCA versionar
+# ============================================================
+
+# Espelho do claude_memory_sharing: os templates têm chaves de API reais
+# (env do settings.json, tokens/headers dos MCPs). Se for usar um repositório
+# PRIVADO só para transportar a memória entre os seus PCs, remova estas linhas.
+NEW_MEMORY/
+NEW_MEMORY.tmp/
+SHARING_MEMORY/
+SHARING_MEMORY.tmp/
+.sync_state.json
+.sync.lock
+sync.log
+sync.log.old
+settings.template.json
+mcp.template.json
+
+# Variáveis de ambiente
+.env
+.env.*
+!.env.example
+
+# Credenciais e chaves
+.credentials.json
+credentials*.json
+secrets*.json
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+
+# Configs reais do Claude Code (só os templates são portáteis)
+settings.json
+settings.local.json
+.claude.json
+.claude/settings.local.json
+
+# Backups criados pelo install.ps1 (podem conter as configs reais)
+*.bak-*
+
+# ============================================================
+# Pastas locais do projeto
+# ============================================================
+CAN_DELETE/
+
+# ============================================================
+# Python
+# ============================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Ambientes virtuais
+.venv/
+venv/
+env/
+ENV/
+
+# Testes, cobertura e type checkers
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.pyright/
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ============================================================
+# Node
+# ============================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+.pnpm-store/
+
+# ============================================================
+# Temporários e logs
+# ============================================================
+*.tmp
+*.temp
+*.log
+logs/
+*.swp
+*.swo
+*~
+
+# ============================================================
+# Editores e IDEs
+# ============================================================
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.sublime-workspace
+*.code-workspace
+
+# ============================================================
+# Sistema operacional
+# ============================================================
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+.directory
+.Trash-*
