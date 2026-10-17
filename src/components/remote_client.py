@@ -174,7 +174,9 @@ class Client:
         status, headers, body = self._request("GET", path)
         if status == 204:
             return None
-        return int(headers.get("X-Version-Id", 0)), body
+        # O proxy da Railway pode mandar o nome do header em minúsculas
+        version = next((v for k, v in headers.items() if k.lower() == "x-version-id"), 0)
+        return int(version), body
 
 
 def keygen(client_id: str) -> None:
