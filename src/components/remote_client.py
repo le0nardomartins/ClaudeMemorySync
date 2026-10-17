@@ -132,7 +132,11 @@ class Client:
         missing = [k for k in ("SERVER_URL", "CLIENT_ID", "CLIENT_PRIVATE_KEY") if not env.get(k)]
         if missing:
             raise RemoteError(f"faltam no .env: {', '.join(missing)}")
-        self.base = env["SERVER_URL"].rstrip("/")
+        base = env["SERVER_URL"].strip().rstrip("/")
+        if base.startswith("http://") and not base.startswith(("http://localhost", "http://127.0.0.1")):
+            raise RemoteError("SERVER_URL precisa ser https:// (a memória leva chaves de API)")
+        # Aceita só o domínio (como a Railway mostra) e completa com https://
+        self.base = base if base.startswith(("https://", "http://")) else f"https://{base}"
         self.client_id = env["CLIENT_ID"]
         seed = base64.b64decode(env["CLIENT_PRIVATE_KEY"])
         if len(seed) != 32:
