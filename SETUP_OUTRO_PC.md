@@ -5,7 +5,7 @@ Quero que este PC participe do meu sistema de compartilhamento de memória do Cl
 entre os meus PCs. Todos os PCs são meus. Faça na ordem, me mostrando o resultado
 de cada etapa, e pare para me perguntar sempre que eu precisar fazer algo manual.
 
-Projeto: %USERPROFILE%\Desktop\interconnection-claude-memory
+Projeto: %USERPROFILE%\Documentos\interconnection-claude-memory
 (cliente Python em src/; o server Node já está rodando na Railway)
 
 ETAPA 1 - Pré-requisitos
