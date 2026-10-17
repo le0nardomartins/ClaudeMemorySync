@@ -14,7 +14,7 @@ ETAPA 1 - Pré-requisitos
 
 ETAPA 2 - Reorganizar ~/.claude (igual ao meu outro PC)
 - Crie %USERPROFILE%\.claude\claude_memory_sharing\
-- Para cada pasta: skills, agents, commands, output-styles, design-references, hooks
+- Para cada pasta: skills, agents, commands, output-styles, design-references, hooks, mods
   * se ~/.claude/<pasta> existir como pasta real: mova o conteúdo para
     claude_memory_sharing/<pasta> (sem apagar nada; se houver conflito de nome,
     me pergunte)

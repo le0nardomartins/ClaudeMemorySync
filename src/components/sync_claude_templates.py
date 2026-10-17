@@ -26,6 +26,9 @@ import copy
 import json
 import os
 import re
+import shutil
+import stat
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -35,6 +38,10 @@ CLAUDE_DIR = HOME / ".claude"
 SHARING_DIR = CLAUDE_DIR / "claude_memory_sharing"
 SETTINGS_SRC = CLAUDE_DIR / "settings.json"
 CLAUDE_JSON_SRC = HOME / ".claude.json"
+
+# Pastas portáteis: ficam em claude_memory_sharing e ~/.claude/<pasta> é uma junction
+# para lá. Para compartilhar uma pasta nova, é só acrescentar aqui.
+PORTABLE_DIRS = ("skills", "agents", "commands", "output-styles", "design-references", "hooks", "mods")
 
 # Formas em que o caminho do usuário aparece nas configs
 _home_win = str(HOME)                                   # C:\Users\leona
@@ -156,11 +163,60 @@ def write_if_changed(path: Path, content: str) -> bool:
     return True
 
 
+def _is_link(path: Path) -> bool:
+    # Junction do Windows não conta como symlink: checa o atributo de reparse point
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return False
+    if os.name == "nt":
+        return bool(st.st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+    return stat.S_ISLNK(st.st_mode)
+
+
+def _make_link(link: Path, target: Path) -> None:
+    if os.name == "nt":
+        subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)],
+                       check=True, capture_output=True)
+    else:
+        link.symlink_to(target, target_is_directory=True)
+
+
+def ensure_structure() -> list:
+    """
+    Garante claude_memory_sharing/<pasta> e a junction ~/.claude/<pasta> para cada
+    PORTABLE_DIRS. Pasta vazia não viaja no zip, então cada PC cria a sua aqui.
+    Se ~/.claude/<pasta> já existir como pasta real, o conteúdo é movido para o
+    sharing (só se lá estiver vazio; senão avisa e não mexe em nada).
+    """
+    created = []
+    for name in PORTABLE_DIRS:
+        target = SHARING_DIR / name
+        link = CLAUDE_DIR / name
+
+        if link.exists() and not _is_link(link):
+            if target.exists() and any(target.iterdir()):
+                print(f"[aviso] {link} e {target} têm conteúdo: junte manualmente", file=sys.stderr)
+                continue
+            if target.exists():
+                target.rmdir()
+            shutil.move(str(link), str(target))
+            created.append(f"{name} (movida para o sharing)")
+
+        if not target.exists():
+            target.mkdir(parents=True)
+            created.append(f"{name}/")
+        if not link.exists():
+            _make_link(link, target)
+            created.append(f"~/.claude/{name} -> sharing")
+    return created
+
+
 def sync() -> list:
     if not SHARING_DIR.exists():
         raise SystemExit(f"Pasta de sharing não encontrada: {SHARING_DIR}")
 
-    changed = []
+    changed = ensure_structure()
     if SETTINGS_SRC.exists():
         settings = load_json(SETTINGS_SRC)
         if write_if_changed(SHARING_DIR / "settings.template.json",

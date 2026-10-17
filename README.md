@@ -22,7 +22,7 @@ Cada PC conversa com um server na Railway. O server junta o que vem de cada um e
 
 | Pasta | O que é |
 |---|---|
-| `~/.claude/claude_memory_sharing/` | A memória de verdade. `~/.claude/skills`, `agents`, `commands`, `hooks`, `output-styles` e `design-references` são *junctions* apontando para cá. |
+| `~/.claude/claude_memory_sharing/` | A memória de verdade. `~/.claude/skills`, `agents`, `commands`, `hooks`, `output-styles`, `design-references` e `mods` são *junctions* apontando para cá. O `sync` recria as que faltarem (lista em `PORTABLE_DIRS`). |
 | `SHARING_MEMORY/` | O que foi **recebido** do server: a versão que junta todos os PCs. |
 | `NEW_MEMORY/` | O que este PC **envia**: espelho da pasta do Claude, com os caminhos do usuário trocados para o formato portátil. |
 
