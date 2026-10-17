@@ -6,8 +6,8 @@ description: Instala, configura e diagnostica o Claude Memory Sync, que mantém 
 # Claude Memory Sync
 
 Projeto em duas partes:
-- **Cliente** (Python, um por PC): https://github.com/le0nardomartins/memory-interconnection-claude
-- **Server** (Node + Postgres, na Railway): https://github.com/le0nardomartins/backend-memory-interconnection-claude
+- **Cliente** (Python, um por PC): https://github.com/le0nardomartins/ClaudeMemorySync
+- **Server** (Node + Postgres, na Railway): https://github.com/le0nardomartins/ClaudeMemorySync-Server
 
 Leia sob demanda, nesta pasta:
 - `setup.md`: instalação do zero, primeiro PC e PCs seguintes

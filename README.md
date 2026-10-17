@@ -4,7 +4,7 @@ Mantém a configuração do **Claude Code** igual em todos os seus computadores:
 
 Você trabalha normalmente em qualquer PC. A cada 15 minutos cada PC envia o que mudou para um server próprio, recebe o que os outros PCs mudaram e **complementa** a sua configuração. Nada é substituído às cegas nem apagado.
 
-> **Este repositório é o cliente** (Python, roda em cada PC). O server fica em [backend-memory-interconnection-claude](https://github.com/le0nardomartins/backend-memory-interconnection-claude) (Node + Postgres, feito para a Railway).
+> **Este repositório é o cliente** (Python, roda em cada PC). O server fica em [ClaudeMemorySync-Server](https://github.com/le0nardomartins/ClaudeMemorySync-Server) (Node + Postgres, feito para a Railway).
 
 > [!WARNING]
 > A sincronização inclui as **chaves de API** do `settings.json` e dos MCPs. Use só entre computadores seus e nunca publique `NEW_MEMORY/`, `SHARING_MEMORY/` ou o `.env`. O `.gitignore` já exclui essas pastas.
@@ -75,18 +75,18 @@ Detalhes em [docs/architecture.md](docs/architecture.md).
 |---|---|
 | Sistema | Windows 10/11 (feito e testado nele). Em macOS/Linux o cliente usa symlinks no lugar de junctions, mas o agendamento automático precisa ser montado à mão (cron, launchd ou systemd). |
 | Python | 3.10 ou mais novo, com `pip install -r requirements.txt` (só `cryptography`). |
-| Server | Uma instância do [server](https://github.com/le0nardomartins/backend-memory-interconnection-claude) no ar. O plano da Railway com Postgres é o caminho documentado. |
+| Server | Uma instância do [server](https://github.com/le0nardomartins/ClaudeMemorySync-Server) no ar. O plano da Railway com Postgres é o caminho documentado. |
 | Claude Code | Instalado em cada PC, com `~/.claude` já criado. |
 
 ## Início rápido
 
-**1. Suba o server.** Siga o README do [backend](https://github.com/le0nardomartins/backend-memory-interconnection-claude). Ao final você terá uma URL como `https://seu-app.up.railway.app`.
+**1. Suba o server.** Siga o README do [backend](https://github.com/le0nardomartins/ClaudeMemorySync-Server). Ao final você terá uma URL como `https://seu-app.up.railway.app`.
 
 **2. Clone este repositório e instale a dependência:**
 
 ```powershell
-git clone https://github.com/le0nardomartins/memory-interconnection-claude.git
-cd memory-interconnection-claude
+git clone https://github.com/le0nardomartins/ClaudeMemorySync.git
+cd ClaudeMemorySync
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
 ```
@@ -227,11 +227,11 @@ Arquivos locais que **não** vão para o git: `.env`, `NEW_MEMORY/`, `SHARING_ME
 A pasta [`docs/`](docs/) tem a documentação detalhada e também é uma **skill do Claude Code** (`claude-memory-sync`). Com ela instalada, o Claude de qualquer PC consegue instalar o projeto, configurar um PC novo, conferir pendências de MCP e plugin e diagnosticar erros.
 
 ```powershell
-git clone --depth 1 https://github.com/le0nardomartins/memory-interconnection-claude.git $env:TEMP\cms
+git clone --depth 1 https://github.com/le0nardomartins/ClaudeMemorySync.git $env:TEMP\cms
 Copy-Item -Recurse $env:TEMP\cms\docs $HOME\.claude\skills\claude-memory-sync
 ```
 
-Outra forma é pedir ao próprio Claude: *"instale como skill a pasta docs de https://github.com/le0nardomartins/memory-interconnection-claude"*.
+Outra forma é pedir ao próprio Claude: *"instale como skill a pasta docs de https://github.com/le0nardomartins/ClaudeMemorySync"*.
 
 | Documento | Conteúdo |
 |---|---|

@@ -15,7 +15,7 @@
 | Git | `git --version` | Para clonar e atualizar. |
 | Node.js | `node --version` | Opcional no cliente. Só é preciso para skills que tenham `package.json` (`npm ci`). |
 | Claude Code | `claude --version` | Rode pelo menos uma vez para criar `~/.claude`. |
-| Server no ar | URL `https://...` | Veja o [README do backend](https://github.com/le0nardomartins/backend-memory-interconnection-claude). |
+| Server no ar | URL `https://...` | Veja o [README do backend](https://github.com/le0nardomartins/ClaudeMemorySync-Server). |
 
 ## Primeiro PC
 
@@ -27,8 +27,8 @@ Siga o README do backend até ter a URL pública (ex.: `https://seu-app.up.railw
 
 ```powershell
 cd $HOME\Documents
-git clone https://github.com/le0nardomartins/memory-interconnection-claude.git
-cd memory-interconnection-claude
+git clone https://github.com/le0nardomartins/ClaudeMemorySync.git
+cd ClaudeMemorySync
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
 ```

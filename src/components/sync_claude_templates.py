@@ -47,11 +47,11 @@ CLAUDE_MD_NAME = "CLAUDE.md"
 PORTABLE_DIRS = ("skills", "agents", "commands", "output-styles", "design-references", "hooks", "mods")
 
 # Formas em que o caminho do usuário aparece nas configs
-_home_win = str(HOME)                                   # C:\Users\leona
-_home_fwd = _home_win.replace("\\", "/")                # C:/Users/leona
+_home_win = str(HOME)                                   # C:\Users\fulano
+_home_fwd = _home_win.replace("\\", "/")                # C:/Users/fulano
 _drive, _rest = _home_fwd.split(":", 1) if ":" in _home_fwd else ("", _home_fwd)
-_home_posix = f"/{_drive.lower()}{_rest}" if _drive else _home_fwd   # /c/Users/leona
-_home_esc = _home_win.replace("\\", "\\\\")             # C:\\Users\\leona
+_home_posix = f"/{_drive.lower()}{_rest}" if _drive else _home_fwd   # /c/Users/fulano
+_home_esc = _home_win.replace("\\", "\\\\")             # C:\\Users\\fulano
 
 
 def _re(text: str):

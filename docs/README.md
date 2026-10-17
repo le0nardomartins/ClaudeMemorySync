@@ -14,7 +14,7 @@ Esta pasta tem dois usos:
 | [troubleshooting.md](troubleshooting.md) | Quem tem um erro | Mensagens do `sync.log`, códigos HTTP e recuperação |
 | [SKILL.md](SKILL.md) | O Claude | Regras e roteiro que o Claude segue ao usar a skill |
 
-O server tem a própria pasta `docs/`, no repositório [backend-memory-interconnection-claude](https://github.com/le0nardomartins/backend-memory-interconnection-claude/tree/main/docs).
+O server tem a própria pasta `docs/`, no repositório [ClaudeMemorySync-Server](https://github.com/le0nardomartins/ClaudeMemorySync-Server/tree/main/docs).
 
 ## Instalar como skill
 
@@ -23,7 +23,7 @@ A skill é só esta pasta, copiada para dentro das skills do Claude Code com o n
 **Windows (PowerShell):**
 
 ```powershell
-git clone --depth 1 https://github.com/le0nardomartins/memory-interconnection-claude.git $env:TEMP\cms
+git clone --depth 1 https://github.com/le0nardomartins/ClaudeMemorySync.git $env:TEMP\cms
 Copy-Item -Recurse $env:TEMP\cms\docs $HOME\.claude\skills\claude-memory-sync
 Remove-Item -Recurse -Force $env:TEMP\cms
 ```
@@ -31,14 +31,14 @@ Remove-Item -Recurse -Force $env:TEMP\cms
 **macOS / Linux:**
 
 ```bash
-git clone --depth 1 https://github.com/le0nardomartins/memory-interconnection-claude.git /tmp/cms
+git clone --depth 1 https://github.com/le0nardomartins/ClaudeMemorySync.git /tmp/cms
 cp -r /tmp/cms/docs ~/.claude/skills/claude-memory-sync
 rm -rf /tmp/cms
 ```
 
 **Pelo próprio Claude.** Em uma sessão do Claude Code, peça:
 
-> Instale como skill a pasta `docs` do repositório https://github.com/le0nardomartins/memory-interconnection-claude, com o nome `claude-memory-sync`.
+> Instale como skill a pasta `docs` do repositório https://github.com/le0nardomartins/ClaudeMemorySync, com o nome `claude-memory-sync`.
 
 Depois de instalada, basta pedir em linguagem natural: *"configure este PC no meu sync do Claude"*, *"o sync está dando 401"*, *"veja se falta instalar algum MCP que veio do outro PC"*.
 
