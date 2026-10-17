@@ -7,11 +7,15 @@ Pastas do projeto:
                   com o caminho do usuário trocado por ~ nos .md)
 
 Ordem de cada rodada (receber primeiro poupa o server de merges desnecessários):
-  1. RECEBER: baixa a versão mais nova (GET /latest) para SHARING_MEMORY, se houver
+  1. RECEBER: baixa o manifesto da versão mais nova (GET /latest), se houver, e monta
+     SHARING_MEMORY com o que já existe neste PC + só o conteúdo que falta (POST /blobs)
   2. MESCLAR: quando TODOS os arquivos chegaram, complementa ~/.claude/claude_memory_sharing
      (e settings.json / .claude.json) sem substituir nada
   3. PREPARAR: gera os templates e espelha a pasta do Claude em NEW_MEMORY
-  4. ENVIAR: só se NEW_MEMORY tiver algo que o server ainda não tem (POST /upload)
+  4. ENVIAR: só se NEW_MEMORY tiver algo que o server ainda não tem (POST /upload),
+     mandando o manifesto e só o conteúdo novo
+
+Não viajam: node_modules, .git, __pycache__ e skills/synced (remote_client.is_excluded).
 
 Sem SERVER_URL no .env, faz só o passo 3.
 
@@ -19,7 +23,7 @@ ATENÇÃO: NEW_MEMORY e SHARING_MEMORY contêm chaves de API (env/MCP). Não pub
 
 Uso:
   python src/main.py                  # uma rodada
-  python src/main.py --loop           # roda para sempre, a cada 5 minutos
+  python src/main.py --loop           # roda para sempre, a cada 15 minutos
   python src/main.py --loop --interval 600
   python src/main.py --offline        # só prepara NEW_MEMORY, sem falar com o server
   python src/main.py --no-upload      # só recebe e mescla
@@ -45,10 +49,18 @@ DEST_DIR = PROJECT_DIR / "NEW_MEMORY"
 INCOMING_DIR = merge_sharing.INCOMING_DIR
 ENV_FILE = PROJECT_DIR / ".env"
 LOCK_FILE = PROJECT_DIR / ".sync.lock"
-DEFAULT_INTERVAL = 300
+# 15 min: entre as rodadas o server da Railway dorme (sleepApplication) e não cobra
+DEFAULT_INTERVAL = 900
 
 # Lixo que não vale a pena levar junto
-IGNORE = shutil.ignore_patterns(".git", "__pycache__", "*.pyc", "*.tmp")
+IGNORE_PATTERNS = shutil.ignore_patterns(".git", "__pycache__", "*.pyc", "*.tmp")
+
+
+def ignore(dirpath, names):
+    """Padrões acima + remote_client.is_excluded (node_modules, skills/synced...)."""
+    rel = Path(dirpath).relative_to(SOURCE_DIR).as_posix()
+    prefix = "" if rel == "." else rel + "/"
+    return set(IGNORE_PATTERNS(dirpath, names)) | {n for n in names if remote.is_excluded(prefix + n)}
 
 
 class SyncFailed(Exception):
@@ -98,7 +110,7 @@ def copy_sharing() -> int:
     staging = DEST_DIR.with_name(DEST_DIR.name + ".tmp")
     if staging.exists():
         shutil.rmtree(staging)
-    shutil.copytree(SOURCE_DIR, staging, ignore=IGNORE)
+    shutil.copytree(SOURCE_DIR, staging, ignore=ignore)
     # O CLAUDE.md global vai junto no pacote, mas não mora no sharing
     if sync_mod.CLAUDE_MD.exists():
         shutil.copy2(sync_mod.CLAUDE_MD, staging / sync_mod.CLAUDE_MD_NAME)
@@ -120,17 +132,8 @@ def refresh_local() -> None:
 # ------------------------------------------------------------------ comparar conteúdo
 
 
-def fingerprint_folder(folder: Path) -> str:
-    """Hash do CONTEÚDO (caminho + sha256 de cada arquivo). Ignora data de modificação."""
-    h = hashlib.sha256()
-    for path in sorted(p for p in folder.rglob("*") if p.is_file() and p.name != remote.MANIFEST):
-        h.update(path.relative_to(folder).as_posix().encode() + b"\0")
-        h.update(hashlib.sha256(path.read_bytes()).digest())
-    return h.hexdigest()
-
-
 def fingerprint_manifest(manifest: dict) -> str:
-    """Mesmo hash de fingerprint_folder, calculado a partir do manifest.json recebido."""
+    """Hash do CONTEÚDO (caminho + sha256 de cada arquivo) a partir de um manifesto. Ignora mtime."""
     h = hashlib.sha256()
     for rel, meta in sorted((manifest.get("files") or {}).items()):
         h.update(rel.encode() + b"\0")
@@ -142,37 +145,52 @@ def fingerprint_manifest(manifest: dict) -> str:
 
 
 def receive(client: "remote.Client") -> None:
-    result = client.download_latest(since=merge_sharing.load_state().get("pulled_version"))
+    result = client.latest(since=merge_sharing.load_state().get("pulled_version"))
     if result is None:
         log("receber: nada novo no server")
     else:
-        version, data = result
-        manifest = remote.unpack(data, INCOMING_DIR)
+        version, manifest = result
+        # O conteúdo que já está aqui (versão anterior ou NEW_MEMORY) não é baixado de novo
+        downloaded = remote.materialize(manifest, INCOMING_DIR, [DEST_DIR], client)
         total = sum(f.get("size", 0) for f in manifest.get("files", {}).values())
         merge_sharing.save_state(pulled_version=version, pulled_fingerprint=fingerprint_manifest(manifest))
-        log(f"receber: {mb(len(data))} recebidos -> versão {version} ({mb(total)}) em SHARING_MEMORY")
+        log(f"receber: versão {version} ({len(manifest.get('files', {}))} arquivos, {mb(total)}), "
+            f"{mb(downloaded)} baixados")
 
     if merge_sharing.pending():
         changed = merge_sharing.apply()
         if changed:
             log(f"mesclar: {len(changed)} arquivo(s) complementado(s): {', '.join(changed[:8])}"
                 + (" ..." if len(changed) > 8 else ""))
+            warn_missing_node_modules()
         else:
             log("mesclar: nada a complementar")
 
 
+def warn_missing_node_modules() -> None:
+    """node_modules não viaja: avisa quais skills precisam de npm ci neste PC."""
+    for pkg in sorted(SOURCE_DIR.glob("skills/*/package.json")):
+        if not (pkg.parent / "node_modules").exists():
+            log(f"aviso: rode 'npm ci' em {pkg.parent} (node_modules não é sincronizado)")
+
+
 def send(client: "remote.Client") -> None:
     state = merge_sharing.load_state()
-    current = fingerprint_folder(DEST_DIR)
+    manifest, index = remote.scan(DEST_DIR)
+    current = fingerprint_manifest(manifest)
     # Nada a enviar se o server já tem exatamente isso (veio de lá ou já foi enviado)
     if current in (state.get("pulled_fingerprint"), state.get("uploaded_fingerprint")):
         log("enviar: nada novo neste PC")
         return
-    package = remote.pack(DEST_DIR)
-    saved = client.upload(package)
+    # O que veio na última versão recebida o server já tem: não precisa reenviar
+    known = set(remote.manifest_index(INCOMING_DIR))
+    saved, sent = client.upload(manifest, index, known)
     merge_sharing.save_state(uploaded_fingerprint=current)
-    log(f"enviar: {mb(len(package))} enviados -> versão {saved['versionId']} no server "
-        f"({saved['fileCount']} arquivos)")
+    if saved.get("unchanged"):
+        log(f"enviar: {mb(sent)} enviados, o server já tinha esse conteúdo (versão {saved['versionId']})")
+    else:
+        log(f"enviar: {mb(sent)} enviados -> versão {saved['versionId']} no server "
+            f"({saved['fileCount']} arquivos)")
 
 
 def run_once(args) -> bool:
@@ -230,7 +248,7 @@ def main():
     redirect_output_if_hidden()
     parser = argparse.ArgumentParser(description="Sincroniza a memória do Claude com o memory server.")
     parser.add_argument("--loop", action="store_true", help="roda para sempre, a cada --interval segundos")
-    parser.add_argument("--interval", type=int, default=DEFAULT_INTERVAL, help="segundos entre rodadas (padrão 300)")
+    parser.add_argument("--interval", type=int, default=DEFAULT_INTERVAL, help="segundos entre rodadas (padrão 900)")
     parser.add_argument("--offline", action="store_true", help="só prepara NEW_MEMORY, sem falar com o server")
     parser.add_argument("--no-upload", action="store_true", help="só recebe e mescla")
     args = parser.parse_args()

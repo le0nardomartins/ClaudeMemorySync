@@ -35,8 +35,10 @@ from pathlib import Path, PurePosixPath
 
 try:
     from . import sync_claude_templates as sync_mod
+    from .remote_client import is_excluded
 except ImportError:
     import sync_claude_templates as sync_mod
+    from remote_client import is_excluded
 
 MANIFEST = "manifest.json"
 PROJECT_DIR = Path(__file__).resolve().parents[2]
@@ -207,6 +209,9 @@ def apply(folder: Path = INCOMING_DIR, target_dir: Path = sync_mod.SHARING_DIR) 
 
     changed = []
     for rel, meta in sorted((manifest.get("files") or {}).items()):
+        # PC com versão antiga ainda pode ter enviado node_modules / skills/synced
+        if is_excluded(rel):
+            continue
         data = folder.joinpath(*PurePosixPath(rel).parts).read_bytes()
         mtime = float(meta.get("mtime") or 0)
 

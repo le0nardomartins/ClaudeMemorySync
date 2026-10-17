@@ -131,3 +131,6 @@ $RECYCLE.BIN/
 # Linux
 .directory
 .Trash-*
+
+# backend-memory-interconnection-claude
+backend-memory-interconnection-claude/

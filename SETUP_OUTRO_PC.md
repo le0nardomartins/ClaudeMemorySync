@@ -22,7 +22,9 @@ ETAPA 2 - Reorganizar ~/.claude (igual ao meu outro PC)
   * crie a JUNCTION ~/.claude/<pasta> -> ~/.claude/claude_memory_sharing/<pasta>
     (PowerShell: New-Item -ItemType Junction). Confira se cada junction resolve.
 - skills/synced (se existir) é do app Claude Desktop: pode ficar dentro de skills,
-  mas não mexa no conteúdo dela.
+  mas não mexa no conteúdo dela. Ela não é sincronizada entre PCs.
+- node_modules também não é sincronizado: para cada skill com package.json, rode
+  npm ci dentro da pasta dela (o sync.log avisa quais faltam).
 - Faça backup de ~/.claude/settings.json, ~/.claude.json e ~/.claude/CLAUDE.md com
   o sufixo .bak-<data> antes de qualquer outra mudança.
 

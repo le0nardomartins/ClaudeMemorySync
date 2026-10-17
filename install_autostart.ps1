@@ -1,9 +1,9 @@
-# Faz o sync da memória do Claude rodar sozinho, a cada 5 minutos, sempre que
+# Faz o sync da memória do Claude rodar sozinho, a cada 15 minutos, sempre que
 # você entrar no Windows. Roda escondido (pythonw) e grava o log em sync.log.
 #
 #   powershell -ExecutionPolicy Bypass -File install_autostart.ps1            # instala e já inicia
 #   powershell -ExecutionPolicy Bypass -File install_autostart.ps1 -Uninstall # remove
-param([switch]$Uninstall, [int]$Interval = 300)
+param([switch]$Uninstall, [int]$Interval = 900)
 
 $ErrorActionPreference = 'Stop'
 $TaskName = 'ClaudeMemorySync'
@@ -27,7 +27,7 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoi
             -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
 
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings `
-    -Description 'Sincroniza ~/.claude/claude_memory_sharing com os outros PCs a cada 5 minutos.' -Force | Out-Null
+    -Description 'Sincroniza ~/.claude/claude_memory_sharing com os outros PCs a cada 15 minutos.' -Force | Out-Null
 Start-ScheduledTask -TaskName $TaskName
 
 Write-Host "Tarefa $TaskName instalada e iniciada (a cada $Interval s, ao entrar no Windows)."
