@@ -38,6 +38,9 @@ CLAUDE_DIR = HOME / ".claude"
 SHARING_DIR = CLAUDE_DIR / "claude_memory_sharing"
 SETTINGS_SRC = CLAUDE_DIR / "settings.json"
 CLAUDE_JSON_SRC = HOME / ".claude.json"
+# CLAUDE.md global: viaja direto de/para ~/.claude/CLAUDE.md, sem cópia no sharing
+CLAUDE_MD = CLAUDE_DIR / "CLAUDE.md"
+CLAUDE_MD_NAME = "CLAUDE.md"
 
 # Pastas portáteis: ficam em claude_memory_sharing e ~/.claude/<pasta> é uma junction
 # para lá. Para compartilhar uma pasta nova, é só acrescentar aqui.
@@ -212,11 +215,27 @@ def ensure_structure() -> list:
     return created
 
 
+def retire_sharing_claude_md() -> list:
+    """
+    Versões antigas guardavam uma cópia do CLAUDE.md no sharing. Se ela for mais nova
+    que a global, vira a global; depois a cópia é apagada.
+    """
+    old = SHARING_DIR / CLAUDE_MD_NAME
+    if not old.exists():
+        return []
+    if not CLAUDE_MD.exists() or old.stat().st_mtime > CLAUDE_MD.stat().st_mtime:
+        shutil.copy2(old, CLAUDE_MD)
+        old.unlink()
+        return ["CLAUDE.md (cópia do sharing promovida a global)"]
+    old.unlink()
+    return ["CLAUDE.md (cópia antiga removida do sharing)"]
+
+
 def sync() -> list:
     if not SHARING_DIR.exists():
         raise SystemExit(f"Pasta de sharing não encontrada: {SHARING_DIR}")
 
-    changed = ensure_structure()
+    changed = ensure_structure() + retire_sharing_claude_md()
     if SETTINGS_SRC.exists():
         settings = load_json(SETTINGS_SRC)
         if write_if_changed(SHARING_DIR / "settings.template.json",

@@ -28,6 +28,7 @@ Uso:
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import sys
 import time
@@ -82,7 +83,10 @@ def make_markdown_portable(root: Path) -> None:
             continue
         portable = sync_mod.portable_markdown(text)
         if portable != text:
+            # Mantém o mtime original: é ele que decide quem ganha no merge
+            st = md.stat()
             md.write_text(portable, encoding="utf-8")
+            os.utime(md, (st.st_atime, st.st_mtime))
 
 
 def copy_sharing() -> int:
@@ -95,6 +99,9 @@ def copy_sharing() -> int:
     if staging.exists():
         shutil.rmtree(staging)
     shutil.copytree(SOURCE_DIR, staging, ignore=IGNORE)
+    # O CLAUDE.md global vai junto no pacote, mas não mora no sharing
+    if sync_mod.CLAUDE_MD.exists():
+        shutil.copy2(sync_mod.CLAUDE_MD, staging / sync_mod.CLAUDE_MD_NAME)
     make_markdown_portable(staging)
 
     # Espelho exato: o que não existe mais no sharing some do NEW_MEMORY

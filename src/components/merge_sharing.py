@@ -13,6 +13,8 @@ Nunca substitui nem apaga: complementa.
   - settings.template.json / mcp.template.json: mesclados direto no
     ~/.claude/settings.json e nos mcpServers do ~/.claude.json (com {{HOME*}}
     expandido), já que os templates são regerados a partir deles a cada sync.
+  - CLAUDE.md: não entra no sharing; substitui inteiro o ~/.claude/CLAUDE.md
+    global se for mais novo (backup em CLAUDE.md.bak-sync).
 
 A mesma lógica de merge roda no server (merge.js, na Railway). Mudou uma, mude a outra.
 
@@ -176,6 +178,21 @@ def merge_config(target: Path, remote_obj, remote_mtime: float, only_key: str = 
     return True
 
 
+def replace_claude_md(data: bytes, remote_mtime: float, target: Path = sync_mod.CLAUDE_MD) -> bool:
+    """Substitui o CLAUDE.md global inteiro se o recebido for mais novo (com backup)."""
+    if target.exists():
+        local = target.read_bytes()
+        try:
+            same = sync_mod.portable_markdown(local.decode("utf-8")).encode("utf-8") == data
+        except UnicodeDecodeError:
+            same = local == data
+        if same or target.stat().st_mtime >= remote_mtime:
+            return False
+        shutil.copy2(target, target.with_name(target.name + ".bak-sync"))
+    write_atomic(target, data, remote_mtime)
+    return True
+
+
 # ------------------------------------------------------------------ aplicar
 
 
@@ -200,6 +217,11 @@ def apply(folder: Path = INCOMING_DIR, target_dir: Path = sync_mod.SHARING_DIR) 
                     changed.append("~/.claude/settings.json")
             elif merge_config(sync_mod.CLAUDE_JSON_SRC, remote, mtime, only_key="mcpServers"):
                 changed.append("~/.claude.json (mcpServers)")
+            continue
+
+        if rel == sync_mod.CLAUDE_MD_NAME:
+            if replace_claude_md(data, mtime):
+                changed.append("~/.claude/CLAUDE.md")
             continue
 
         if merge_into(target_dir.joinpath(*PurePosixPath(rel).parts), data, mtime, rel):
