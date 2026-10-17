@@ -1,5 +1,7 @@
 # Documentação do Claude Memory Sync (cliente)
 
+**Português** · [English](en/README.md)
+
 Esta pasta tem dois usos:
 
 1. **Documentação** do cliente, para quem quer instalar, entender ou modificar o projeto.
@@ -10,6 +12,7 @@ Esta pasta tem dois usos:
 | Documento | Para quem | Conteúdo |
 |---|---|---|
 | [setup.md](setup.md) | Quem vai instalar | Pré-requisitos, primeiro PC, PCs seguintes, atualização e desinstalação |
+| [git-backend.md](git-backend.md) | Quem não quer subir server | Modo com repositório Git privado no lugar do server |
 | [architecture.md](architecture.md) | Quem quer entender ou contribuir | Rodada de sync, pastas, protocolo com o server, merge, estado local |
 | [troubleshooting.md](troubleshooting.md) | Quem tem um erro | Mensagens do `sync.log`, códigos HTTP e recuperação |
 | [SKILL.md](SKILL.md) | O Claude | Regras e roteiro que o Claude segue ao usar a skill |
@@ -47,15 +50,15 @@ Depois de instalada, basta pedir em linguagem natural: *"configure este PC no me
 ## Visão geral em 30 segundos
 
 ```
- PC A ──┐                         ┌── PC B
-        │  manifesto + só o que   │
-        ├──► mudou (assinado) ──► │
-        │       SERVER            │
-        │   Postgres: 3 versões,  │
-        │   cada conteúdo 1 vez   │
-        └──◄ só o que falta ◄─────┘
+ PC A ──┐                                 ┌── PC B
+        │  "me baseei na versão N":       │
+        ├──► manifesto + o que mudou ───► │
+        │       (cifrado com SYNC_KEY)    │
+        │    SERVER ou REPOSITÓRIO GIT    │
+        │    só guarda; não lê nada       │
+        └──◄ só o que falta ◄─────────────┘
 ```
 
-- Cada PC envia o **manifesto** dos arquivos (caminho → sha256) e só o conteúdo que o server não tem.
-- O server **mescla** com a versão anterior, sem apagar nada, e guarda a nova versão.
-- Os outros PCs baixam o manifesto novo, pedem só o que falta e **complementam** a configuração local.
+- Cada PC compara o próprio estado e a versão mais nova do destino com a **base** do último sync (merge de 3 vias): edições, inclusões e remoções se propagam.
+- O PC envia o resultado cifrado dizendo em qual versão se baseou. Se outro PC chegou antes, ele busca de novo e refaz o merge.
+- A ordem das mudanças é a das versões no destino, não o relógio dos PCs.

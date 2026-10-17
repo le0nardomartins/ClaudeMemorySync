@@ -1,23 +1,23 @@
 """
-Sincroniza a memória do Claude entre PCs pelo memory server da Railway.
+Sincroniza a memória do Claude entre PCs.
 
 Pastas do projeto:
-  SHARING_MEMORY  o que foi RECEBIDO do server (versão mais nova de todos os PCs)
-  NEW_MEMORY      o que este PC ENVIA (espelho de ~/.claude/claude_memory_sharing,
-                  com o caminho do usuário trocado por ~ nos .md)
+  NEW_MEMORY      estado atual deste PC (espelho de ~/.claude/claude_memory_sharing +
+                  CLAUDE.md, com o caminho do usuário trocado por ~ nos .md)
+  SHARING_MEMORY  BASE: a versão em que este PC e o destino concordaram no último sync
 
-Ordem de cada rodada (receber primeiro poupa o server de merges desnecessários):
-  1. RECEBER: baixa o manifesto da versão mais nova (GET /latest), se houver, e monta
-     SHARING_MEMORY com o que já existe neste PC + só o conteúdo que falta (POST /blobs)
-  2. MESCLAR: quando TODOS os arquivos chegaram, complementa ~/.claude/claude_memory_sharing
-     (e settings.json / .claude.json) sem substituir nada
-  3. PREPARAR: gera os templates e espelha a pasta do Claude em NEW_MEMORY
-  4. ENVIAR: só se NEW_MEMORY tiver algo que o server ainda não tem (POST /upload),
-     mandando o manifesto e só o conteúdo novo
+Cada rodada:
+  1. PREPARAR: gera os templates de settings/MCP e espelha a pasta do Claude em NEW_MEMORY
+  2. SINCRONIZAR (components/sync_engine.py): busca a versão mais nova do destino, faz
+     o merge de 3 vias (base x local x remoto), envia o resultado e aplica na pasta do
+     Claude. Remoções também se propagam (com trava contra remoção em massa e lixeira).
+
+Destino: o memory server (SERVER_URL, padrão) ou, sem server nenhum, um repositório
+Git privado (SYNC_BACKEND=git + GIT_REPO_URL). Com SYNC_KEY no .env, o conteúdo é
+criptografado no PC antes de sair (components/crypto_codec.py).
+Sem destino no .env, faz só o passo 1.
 
 Não viajam: node_modules, .git, __pycache__ e skills/synced (remote_client.is_excluded).
-
-Sem SERVER_URL no .env, faz só o passo 3.
 
 ATENÇÃO: NEW_MEMORY e SHARING_MEMORY contêm chaves de API (env/MCP). Não publique.
 
@@ -25,28 +25,28 @@ Uso:
   python src/main.py                  # uma rodada
   python src/main.py --loop           # roda para sempre, a cada 15 minutos
   python src/main.py --loop --interval 600
-  python src/main.py --offline        # só prepara NEW_MEMORY, sem falar com o server
-  python src/main.py --no-upload      # só recebe e mescla
+  python src/main.py --offline        # só prepara NEW_MEMORY, sem falar com o destino
+  python src/main.py --no-upload      # só recebe e aplica
+  python src/main.py --allow-delete   # libera uma remoção grande feita de propósito
 """
 
 import argparse
-import hashlib
 import json
-import os
 import shutil
 import sys
 import time
 from pathlib import Path
 
-from components import merge_sharing
+from components import git_backend
 from components import remote_client as remote
+from components import sync_engine
+from components.crypto_codec import Codec, CodecError
 from components import sync_claude_templates as sync_mod
 from components.remote_client import retry
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 SOURCE_DIR = sync_mod.SHARING_DIR
 DEST_DIR = PROJECT_DIR / "NEW_MEMORY"
-INCOMING_DIR = merge_sharing.INCOMING_DIR
 ENV_FILE = PROJECT_DIR / ".env"
 LOCK_FILE = PROJECT_DIR / ".sync.lock"
 # 15 min: entre as rodadas o server da Railway dorme (sleepApplication) e não cobra
@@ -95,10 +95,7 @@ def make_markdown_portable(root: Path) -> None:
             continue
         portable = sync_mod.portable_markdown(text)
         if portable != text:
-            # Mantém o mtime original: é ele que decide quem ganha no merge
-            st = md.stat()
             md.write_text(portable, encoding="utf-8")
-            os.utime(md, (st.st_atime, st.st_mtime))
 
 
 def copy_sharing() -> int:
@@ -129,42 +126,7 @@ def refresh_local() -> None:
     log(f"NEW_MEMORY: {count} itens prontos para envio")
 
 
-# ------------------------------------------------------------------ comparar conteúdo
-
-
-def fingerprint_manifest(manifest: dict) -> str:
-    """Hash do CONTEÚDO (caminho + sha256 de cada arquivo) a partir de um manifesto. Ignora mtime."""
-    h = hashlib.sha256()
-    for rel, meta in sorted((manifest.get("files") or {}).items()):
-        h.update(rel.encode() + b"\0")
-        h.update(bytes.fromhex(meta["sha256"]))
-    return h.hexdigest()
-
-
 # ------------------------------------------------------------------ rodada
-
-
-def receive(client: "remote.Client") -> None:
-    result = client.latest(since=merge_sharing.load_state().get("pulled_version"))
-    if result is None:
-        log("receber: nada novo no server")
-    else:
-        version, manifest = result
-        # O conteúdo que já está aqui (versão anterior ou NEW_MEMORY) não é baixado de novo
-        downloaded = remote.materialize(manifest, INCOMING_DIR, [DEST_DIR], client)
-        total = sum(f.get("size", 0) for f in manifest.get("files", {}).values())
-        merge_sharing.save_state(pulled_version=version, pulled_fingerprint=fingerprint_manifest(manifest))
-        log(f"receber: versão {version} ({len(manifest.get('files', {}))} arquivos, {mb(total)}), "
-            f"{mb(downloaded)} baixados")
-
-    if merge_sharing.pending():
-        changed = merge_sharing.apply()
-        if changed:
-            log(f"mesclar: {len(changed)} arquivo(s) complementado(s): {', '.join(changed[:8])}"
-                + (" ..." if len(changed) > 8 else ""))
-            warn_missing_node_modules()
-        else:
-            log("mesclar: nada a complementar")
 
 
 def warn_missing_node_modules() -> None:
@@ -174,41 +136,27 @@ def warn_missing_node_modules() -> None:
             log(f"aviso: rode 'npm ci' em {pkg.parent} (node_modules não é sincronizado)")
 
 
-def send(client: "remote.Client") -> None:
-    state = merge_sharing.load_state()
-    manifest, index = remote.scan(DEST_DIR)
-    current = fingerprint_manifest(manifest)
-    # Nada a enviar se o server já tem exatamente isso (veio de lá ou já foi enviado)
-    if current in (state.get("pulled_fingerprint"), state.get("uploaded_fingerprint")):
-        log("enviar: nada novo neste PC")
-        return
-    # O que veio na última versão recebida o server já tem: não precisa reenviar
-    known = set(remote.manifest_index(INCOMING_DIR))
-    saved, sent = client.upload(manifest, index, known)
-    merge_sharing.save_state(uploaded_fingerprint=current)
-    if saved.get("unchanged"):
-        log(f"enviar: {mb(sent)} enviados, o server já tinha esse conteúdo (versão {saved['versionId']})")
-    else:
-        log(f"enviar: {mb(sent)} enviados -> versão {saved['versionId']} no server "
-            f"({saved['fileCount']} arquivos)")
-
-
 def run_once(args) -> bool:
     """Uma rodada completa. Devolve False se algo falhou (o loop tenta de novo depois)."""
     try:
         env = remote.load_env(ENV_FILE)
-        online = not args.offline and bool(env.get("SERVER_URL"))
+        use_git = env.get("SYNC_BACKEND", "").strip().lower() == "git"
+        online = not args.offline and bool(env.get("GIT_REPO_URL" if use_git else "SERVER_URL"))
         if not args.offline and not online:
-            log(f"SERVER_URL não definida em {ENV_FILE}: só preparando NEW_MEMORY")
+            missing = "GIT_REPO_URL" if use_git else "SERVER_URL"
+            log(f"{missing} não definida em {ENV_FILE}: só preparando NEW_MEMORY")
 
-        client = remote.Client(env) if online else None
-        if client:
-            receive(client)
         refresh_local()
-        if client and not args.no_upload:
-            send(client)
+        if not online:
+            return True
+        store = git_backend.GitStore(env) if use_git else remote.Client(env)
+        codec = Codec(env.get("SYNC_KEY"))
+        changed = sync_engine.sync_round(store, codec, DEST_DIR, upload=not args.no_upload,
+                                         allow_delete=args.allow_delete, log=log)
+        if changed:
+            warn_missing_node_modules()
         return True
-    except (remote.RemoteError, SyncFailed, SystemExit, OSError) as e:
+    except (remote.RemoteError, CodecError, sync_engine.SyncAborted, SyncFailed, SystemExit, OSError) as e:
         log(f"[erro] {e}", err=True)
         return False
 
@@ -233,9 +181,9 @@ def acquire_lock():
     return handle
 
 
-def redirect_output_if_hidden() -> None:
-    """Rodando via pythonw (sem console), manda a saída para sync.log (máx. ~2 MB)."""
-    if sys.stdout is not None:
+def redirect_output_if_hidden(force: bool = False) -> None:
+    """Sem console (pythonw) ou com --log-file (launchd/systemd): saída em sync.log (máx. ~2 MB)."""
+    if sys.stdout is not None and not force:
         return
     log_file = PROJECT_DIR / "sync.log"
     if log_file.exists() and log_file.stat().st_size > 2 * 1024 * 1024:
@@ -246,19 +194,21 @@ def redirect_output_if_hidden() -> None:
 
 def main():
     redirect_output_if_hidden()
-    parser = argparse.ArgumentParser(description="Sincroniza a memória do Claude com o memory server.")
+    parser = argparse.ArgumentParser(description="Sincroniza a memória do Claude entre PCs.")
     parser.add_argument("--loop", action="store_true", help="roda para sempre, a cada --interval segundos")
     parser.add_argument("--interval", type=int, default=DEFAULT_INTERVAL, help="segundos entre rodadas (padrão 900)")
     parser.add_argument("--offline", action="store_true", help="só prepara NEW_MEMORY, sem falar com o server")
-    parser.add_argument("--no-upload", action="store_true", help="só recebe e mescla")
+    parser.add_argument("--no-upload", action="store_true", help="só recebe e aplica")
+    parser.add_argument("--allow-delete", action="store_true",
+                        help="libera propagar uma remoção grande (padrão: trava acima de 20%% dos arquivos)")
+    parser.add_argument("--log-file", action="store_true", help="grava a saída em sync.log (usado pelo autostart)")
     args = parser.parse_args()
+    redirect_output_if_hidden(force=args.log_file)
 
     lock = acquire_lock()
     if lock is None:
         log("já existe uma sincronização rodando neste PC; saindo")
         sys.exit(0)
-
-    INCOMING_DIR.mkdir(parents=True, exist_ok=True)
 
     if not args.loop:
         sys.exit(0 if run_once(args) else 1)

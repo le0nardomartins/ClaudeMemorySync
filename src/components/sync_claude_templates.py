@@ -239,14 +239,14 @@ def sync() -> list:
     if SETTINGS_SRC.exists():
         settings = load_json(SETTINGS_SRC)
         if write_if_changed(SHARING_DIR / "settings.template.json",
-                            json.dumps(portable_settings(settings), indent=2, ensure_ascii=False) + "\n"):
+                            json.dumps(portable_settings(settings), indent=2, ensure_ascii=False, sort_keys=True) + "\n"):
             changed.append("settings.template.json")
         if write_if_changed(SHARING_DIR / "plugins-install.txt", plugin_commands(settings)):
             changed.append("plugins-install.txt")
 
     if CLAUDE_JSON_SRC.exists():
         if write_if_changed(SHARING_DIR / "mcp.template.json",
-                            json.dumps(portable_mcp(load_json(CLAUDE_JSON_SRC)), indent=2, ensure_ascii=False) + "\n"):
+                            json.dumps(portable_mcp(load_json(CLAUDE_JSON_SRC)), indent=2, ensure_ascii=False, sort_keys=True) + "\n"):
             changed.append("mcp.template.json")
 
     return changed

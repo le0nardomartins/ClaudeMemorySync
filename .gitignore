@@ -6,6 +6,9 @@
 # (env do settings.json, tokens/headers dos MCPs). Se for usar um repositório
 # PRIVADO só para transportar a memória entre os seus PCs, remova estas linhas.
 NEW_MEMORY/
+.sync_repo/
+.sync_conflicts/
+.sync_trash/
 NEW_MEMORY.tmp/
 SHARING_MEMORY/
 SHARING_MEMORY.tmp/
@@ -132,5 +135,5 @@ $RECYCLE.BIN/
 .directory
 .Trash-*
 
-# backend-memory-interconnection-claude
-backend-memory-interconnection-claude/
+# Repositório do server (ClaudeMemorySync-Server), clonado ao lado para desenvolvimento
+ClaudeMemorySync-Server/
