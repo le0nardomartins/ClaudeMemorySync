@@ -52,7 +52,8 @@ Copying the whole folder doesn't work either. It contains absolute paths (`C:\Us
  3. MERGE     BASE (SHARING_MEMORY/, last sync) × LOCAL × REMOTE
               - changed on one side only  → taken (deletions included)
               - changed on both sides     → merged by line / JSON key
-              - real conflict             → this machine wins; the other version goes to .sync_conflicts/
+              - real conflict             → the NEWEST file wins; the other goes to .sync_conflicts/
+              - stale copy                → never overwrites a newer version
 
  4. SEND      encrypted result + "I based this on version N"
               backend already at N+1?     → fetch again, redo the merge (step 2)
@@ -194,15 +195,18 @@ It's a **3-way** merge: each side is compared with the **base** (the version fro
 | Only one machine changed a block | The change is applied. Editing a line **replaces** it (no duplicates). |
 | Only one machine removed a line, key or file | The removal propagates. |
 | Both changed different blocks of the same file | Both changes are applied. |
-| Both added lines at the same spot (e.g. a new rule at the end) | Both are kept. |
-| Both changed the same block differently | **Conflict**: the version from whoever synced last wins; the other is saved in `.sync_conflicts/` and logged. |
+| Both added lines at the same spot (e.g. a new section at the end) | Both blocks are kept whole, one after the other. |
+| Both changed the same block differently | **Conflict**: the block from the **newest** file (modification time) wins; the other version is saved in `.sync_conflicts/` and logged. |
+| One machine "changed" a file to content **older** than the other's (stale copy, lost base) | The newest version stays. An old copy never overwrites an edit. |
+| The file exists on both machines, different, with no base (new machine) | The newest whole file wins; the other goes to `.sync_conflicts/`. |
+| You edit a file while the sync is running | Your edit is kept; the sync doesn't write over it and merges it next round. |
 | One machine deleted a file and the other edited it | The edit wins: the file stays. |
 
 Details by file type:
 - **JSON** is merged per key, and lists per item. That covers `settings.json` (permissions, hooks, env) and the `mcpServers` in `~/.claude.json`, which receive only the difference, with a `.bak-sync` backup.
 - The global **`CLAUDE.md`** goes through the same text merge, also with a `.bak-sync` backup.
 - A **binary** file changed on both sides is a whole-file conflict.
-- **"Last" means arrival order at the backend** (the version number), not machine clocks. A machine with a wrong clock doesn't cause trouble.
+- **"Newest" means the file's modification time**, which travels with it. A received file keeps the time of the original edit. That's why machine clocks must be right (automatic time sync on).
 
 **Mass-deletion guard:** if more than 20% of the files (and more than 10) disappear from a machine at once, for example because of a broken junction, the sync stops and asks for confirmation (`--allow-delete`) instead of deleting everything on the other machines. A file deleted by another machine goes to `.sync_trash/` and is never gone for good.
 
@@ -238,6 +242,8 @@ Without `SYNC_KEY`, the sync still works, but content is only compressed, not se
 
 - **Short history (server).** The server keeps only the last 3 versions. It isn't a backup, but `.sync_trash/` and `.sync_conflicts/` keep whatever left each machine.
 - **Programs don't travel.** MCP executables, plugins and logins (e.g. Figma OAuth) must be installed or authenticated on each machine.
+- **Clocks.** Conflicts are decided by modification time: a machine whose clock is far ahead or behind makes its edits look newer or older than they are. The discarded version always stays in `.sync_conflicts/`.
+- **Git mode history grows forever.** Each sync is a commit; for configs that's small, but you can restart the history ([how](docs/en/git-backend.md#repository-size)).
 - **`SYNC_KEY` must match on every machine.** Lost it? Generate a new one and reset the backend ([how](docs/en/troubleshooting.md#rotating-the-sync_key)): the machines upload everything again.
 
 ## Troubleshooting
@@ -249,7 +255,8 @@ Log messages are in Portuguese. They appear here exactly as logged.
 | `não consegui decifrar: a SYNC_KEY deste PC é diferente` | This machine's `SYNC_KEY` differs from the others. |
 | `os dados estão criptografados: defina a mesma SYNC_KEY` | This machine has no `SYNC_KEY`. |
 | `N arquivos sumiram deste PC ... --allow-delete` | The mass-deletion guard fired. Check the junctions; if the deletion was intentional, run with `--allow-delete`. |
-| `conflito em N arquivo(s)` | Both machines changed the same block. The losing version is in `.sync_conflicts/`. |
+| `conflito em N arquivo(s): ficou a versão mais nova` | Two machines changed the same block, or one had a stale copy. The discarded version is in `.sync_conflicts/`. |
+| `editado durante o sync, mantido como está` | You edited the file while the round was running. Nothing was overwritten; the next round merges it. |
 | `HTTP 401` | This machine's public key isn't in `CLIENT_PUBLIC_KEYS`, `CLIENT_ID` doesn't match, or the clock is way off (±5 min). |
 | `HTTP 415` / `formato antigo` | Client and server on different versions. Update both (`git pull`) and restart the sync. |
 | `git push falhou` / `git clone falhou` (Git mode) | This machine's `git` can't reach `GIT_REPO_URL`. Test with `git ls-remote <url>`. |
@@ -278,6 +285,19 @@ requirements.txt
 ```
 
 Local files that are **not** committed: `.env`, `NEW_MEMORY/`, `SHARING_MEMORY/`, `.sync_repo/`, `.sync_conflicts/`, `.sync_trash/`, `.sync.lock` and `sync.log`.
+
+## Development
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+python -m pytest -q tests
+```
+
+The tests cover the 3-way merge (`tests/test_merge3.py`) and full rounds between several simulated machines (`tests/test_sync.py`): conflicts, stale copies, edits during a sync, deletions, templates, encryption and the Git backend. They run on GitHub Actions on Windows, macOS and Linux.
+
+## License
+
+[MIT](LICENSE).
 
 ## Full docs and Claude skill
 

@@ -106,7 +106,7 @@ def is_excluded(rel: str) -> bool:
 
 
 def scan(folder: Path):
-    """Devolve ({caminho: {sha256, size}}, índice sha256 -> Path) de uma pasta, sem as exclusões."""
+    """Devolve ({caminho: {sha256, size, mtime}}, índice sha256 -> Path) de uma pasta, sem as exclusões."""
     files, index = {}, {}
     if not folder.exists():
         return files, index
@@ -116,7 +116,7 @@ def scan(folder: Path):
             continue
         data = path.read_bytes()
         digest = sha256(data)
-        files[rel] = {"sha256": digest, "size": len(data)}
+        files[rel] = {"sha256": digest, "size": len(data), "mtime": path.stat().st_mtime}
         index.setdefault(digest, path)
     return files, index
 

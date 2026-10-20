@@ -67,7 +67,7 @@ Depois da primeira rodada, faça a **verificação de pendências** abaixo.
 
 ### Recuperar algo
 - **Arquivo removido por outro PC:** está em `.sync_trash/<data>/<caminho>` na raiz do projeto. Copie de volta para `~/.claude/claude_memory_sharing/<caminho>`.
-- **Versão perdida num conflito:** está em `.sync_conflicts/<data>/<caminho>`. Mostre a diferença ao usuário e aplique o que ele quiser manter.
+- **Versão perdida num conflito ou edição trocada por uma versão antiga:** a versão descartada está em `.sync_conflicts/<data>/<caminho>` do PC que a descartou (em conflito, ganha sempre o arquivo mais novo pela data de modificação). Mostre a diferença ao usuário e aplique o que ele quiser manter. Se a edição tinha sido feita pelo Claude Code, o conteúdo também está nos transcripts da sessão em `~/.claude/projects/`.
 - **`settings.json`, `~/.claude.json` ou `CLAUDE.md` estragado:** restaure do `.bak-sync` ao lado.
 
 ### Diagnosticar

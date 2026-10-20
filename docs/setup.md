@@ -137,7 +137,7 @@ Repita os passos 2, 3, 5, 6 e 7 com um **nome de PC diferente** e a **mesma** `S
 Na primeira rodada, o PC novo ainda não tem base, então tudo é tratado como "acrescentado dos dois lados":
 - o que só ele tem é enviado;
 - o que só o destino tem chega aqui;
-- arquivos com versões diferentes nos dois são mesclados linha a linha, e só há conflito onde o mesmo trecho difere.
+- arquivo que existe nos dois com conteúdo diferente fica com a versão **mais nova** inteira, e a outra vai para `.sync_conflicts/`.
 
 Nada é removido nessa primeira rodada.
 

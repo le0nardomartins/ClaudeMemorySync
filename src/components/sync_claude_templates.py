@@ -123,6 +123,16 @@ def portable_markdown(text: str) -> str:
     return MD_HOME_RE.sub(repl, text)
 
 
+def portable_bytes(rel: str, data: bytes) -> bytes:
+    """Como o arquivo viaja: .md com o caminho do usuário trocado (fim de linha intacto)."""
+    if not rel.lower().endswith(".md"):
+        return data
+    try:
+        return portable_markdown(data.decode("utf-8")).encode("utf-8")
+    except UnicodeDecodeError:
+        return data
+
+
 def portable_settings(settings: dict) -> dict:
     s = copy.deepcopy(settings)
 
@@ -158,10 +168,13 @@ def plugin_commands(settings: dict) -> str:
 
 
 def write_if_changed(path: Path, content: str) -> bool:
-    if path.exists() and path.read_text(encoding="utf-8") == content:
+    # Bytes exatos (LF em qualquer sistema): o mesmo template precisa ter o mesmo hash
+    # no Windows e no macOS/Linux, senão os PCs ficam reenviando um para o outro
+    data = content.encode("utf-8")
+    if path.exists() and path.read_bytes() == data:
         return False
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(content, encoding="utf-8")
+    tmp.write_bytes(data)
     os.replace(tmp, path)
     return True
 
@@ -236,20 +249,24 @@ def sync() -> list:
         raise SystemExit(f"Pasta de sharing não encontrada: {SHARING_DIR}")
 
     changed = ensure_structure() + retire_sharing_claude_md()
+    for name, content in render_templates().items():
+        if write_if_changed(SHARING_DIR / name, content):
+            changed.append(name)
     if SETTINGS_SRC.exists():
-        settings = load_json(SETTINGS_SRC)
-        if write_if_changed(SHARING_DIR / "settings.template.json",
-                            json.dumps(portable_settings(settings), indent=2, ensure_ascii=False, sort_keys=True) + "\n"):
-            changed.append("settings.template.json")
-        if write_if_changed(SHARING_DIR / "plugins-install.txt", plugin_commands(settings)):
+        if write_if_changed(SHARING_DIR / "plugins-install.txt", plugin_commands(load_json(SETTINGS_SRC))):
             changed.append("plugins-install.txt")
-
-    if CLAUDE_JSON_SRC.exists():
-        if write_if_changed(SHARING_DIR / "mcp.template.json",
-                            json.dumps(portable_mcp(load_json(CLAUDE_JSON_SRC)), indent=2, ensure_ascii=False, sort_keys=True) + "\n"):
-            changed.append("mcp.template.json")
-
     return changed
+
+
+def render_templates() -> dict:
+    """{nome do template: conteúdo} gerado dos configs REAIS deste PC, como vai para o sharing."""
+    dump = lambda obj: json.dumps(obj, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
+    out = {}
+    if SETTINGS_SRC.exists():
+        out["settings.template.json"] = dump(portable_settings(load_json(SETTINGS_SRC)))
+    if CLAUDE_JSON_SRC.exists():
+        out["mcp.template.json"] = dump(portable_mcp(load_json(CLAUDE_JSON_SRC)))
+    return out
 
 
 def mtimes() -> tuple:

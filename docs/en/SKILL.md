@@ -69,7 +69,7 @@ After the first round, run the **pending-items check** below.
 
 ### Recover something
 - **File deleted by another machine:** it's in `.sync_trash/<date>/<path>` in the project root. Copy it back to `~/.claude/claude_memory_sharing/<path>`.
-- **Version lost in a conflict:** it's in `.sync_conflicts/<date>/<path>`. Show the user the difference and apply what they want to keep.
+- **Version lost in a conflict, or an edit replaced by an old version:** the discarded version is in `.sync_conflicts/<date>/<path>` on the machine that discarded it (in a conflict the newest file by modification time always wins). Show the user the difference and apply what they want to keep. If Claude Code made the edit, its content is also in the session transcripts under `~/.claude/projects/`.
 - **Broken `settings.json`, `~/.claude.json` or `CLAUDE.md`:** restore from the `.bak-sync` next to it.
 
 ### Troubleshoot

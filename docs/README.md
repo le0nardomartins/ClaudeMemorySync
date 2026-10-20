@@ -61,4 +61,4 @@ Depois de instalada, basta pedir em linguagem natural: *"configure este PC no me
 
 - Cada PC compara o próprio estado e a versão mais nova do destino com a **base** do último sync (merge de 3 vias): edições, inclusões e remoções se propagam.
 - O PC envia o resultado cifrado dizendo em qual versão se baseou. Se outro PC chegou antes, ele busca de novo e refaz o merge.
-- A ordem das mudanças é a das versões no destino, não o relógio dos PCs.
+- Em conflito, ganha o arquivo mais novo (data de modificação). Uma cópia antiga nunca volta por cima de uma edição.

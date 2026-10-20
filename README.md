@@ -52,7 +52,8 @@ Copiar a pasta inteira não resolve: ela tem caminhos absolutos (`C:\Users\fulan
  3. MESCLAR     BASE (SHARING_MEMORY/, último sync) × LOCAL × REMOTO
                 - mudou só de um lado      → entra (inclusive remoção)
                 - mudou dos dois lados     → merge por linha / chave JSON
-                - conflito real            → ganha este PC; a outra versão vai para .sync_conflicts/
+                - conflito real            → ganha o arquivo MAIS NOVO; o outro vai para .sync_conflicts/
+                - cópia desatualizada      → nunca volta por cima de uma versão mais nova
 
  4. ENVIAR      resultado cifrado + "me baseei na versão N"
                 destino já está na N+1?    → busca de novo, refaz o merge (passo 2)
@@ -194,15 +195,18 @@ O merge é de **3 vias**: cada lado é comparado com a **base** (a versão do ú
 | Só um PC mudou um trecho | Entra a mudança. Editar uma linha **substitui** a linha (não duplica). |
 | Só um PC removeu uma linha, chave ou arquivo | A remoção se propaga. |
 | Os dois PCs mudaram trechos diferentes do mesmo arquivo | Entram as duas mudanças. |
-| Os dois acrescentaram linhas no mesmo ponto (ex.: regra nova no fim) | Entram as duas. |
-| Os dois mudaram o mesmo trecho de forma diferente | **Conflito**: fica a versão de quem sincronizou por último; a outra é guardada em `.sync_conflicts/` e aparece no log. |
+| Os dois acrescentaram linhas no mesmo ponto (ex.: seção nova no fim) | Entram os dois blocos inteiros, um depois do outro. |
+| Os dois mudaram o mesmo trecho de forma diferente | **Conflito**: fica o trecho do arquivo **mais novo** (data de modificação); a outra versão é guardada em `.sync_conflicts/` e aparece no log. |
+| Um PC "mudou" o arquivo para um conteúdo mais **velho** que o do outro (cópia desatualizada, base perdida) | Fica a versão mais nova. Uma cópia antiga nunca volta por cima de uma edição. |
+| O arquivo existe nos dois PCs, diferente, e não há base (PC novo) | Fica o arquivo mais novo inteiro; o outro vai para `.sync_conflicts/`. |
+| Você edita um arquivo enquanto o sync está rodando | A edição é mantida; o sync não grava por cima e mescla na rodada seguinte. |
 | Um PC removeu o arquivo e o outro o editou | A edição vence: o arquivo fica. |
 
 Detalhes por tipo de arquivo:
 - **JSON** é mesclado por chave, e listas por item. É assim com `settings.json` (permissões, hooks, env) e com os `mcpServers` do `~/.claude.json`, que recebem só a diferença, com backup `.bak-sync`.
 - **`CLAUDE.md`** global passa pelo mesmo merge de texto, também com backup `.bak-sync`.
 - **Binário** mudado dos dois lados conta como conflito no arquivo inteiro.
-- **"Último" é a ordem de chegada no destino** (o número da versão), não o relógio dos PCs. Um PC com o relógio errado não atrapalha.
+- **"Mais novo" é a data de modificação do arquivo**, que viaja junto com ele. Arquivo recebido mantém a data da edição original. Por isso os relógios dos PCs precisam estar certos (sincronização automática de horário ligada).
 
 **Trava contra remoção em massa:** se mais de 20% dos arquivos sumirem de um PC de uma vez (e mais de 10), por exemplo por uma junction quebrada, o sync para e pede confirmação (`--allow-delete`) em vez de apagar tudo nos outros PCs. Arquivo removido por outro PC vai para `.sync_trash/`, nunca é apagado de vez.
 
@@ -238,6 +242,8 @@ Sem `SYNC_KEY`, o sync funciona, mas o conteúdo vai só compactado, sem sigilo.
 
 - **Histórico curto (server).** O server guarda só as 3 últimas versões. Não é backup, mas `.sync_trash/` e `.sync_conflicts/` guardam o que saiu de cada PC.
 - **Programas não viajam.** MCPs com executável, plugins e logins (OAuth do Figma, por exemplo) precisam ser instalados ou autenticados em cada PC.
+- **Relógio.** Conflitos são decididos pela data de modificação: um PC com o relógio muito adiantado ou atrasado faz suas edições parecerem mais novas ou mais velhas do que são. A versão descartada sempre fica em `.sync_conflicts/`.
+- **Histórico do modo Git cresce para sempre.** Cada sync é um commit; para configs isso é pouco, mas dá para recomeçar o histórico ([como](docs/git-backend.md#tamanho-do-repositório)).
 - **A `SYNC_KEY` precisa ser igual em todos os PCs.** Perdeu a chave? Gere outra e recomece o destino ([como](docs/troubleshooting.md#trocar-a-sync_key)): os PCs reenviam tudo.
 
 ## Problemas comuns
@@ -247,7 +253,8 @@ Sem `SYNC_KEY`, o sync funciona, mas o conteúdo vai só compactado, sem sigilo.
 | `não consegui decifrar: a SYNC_KEY deste PC é diferente` | A `SYNC_KEY` do `.env` não é a mesma dos outros PCs. |
 | `os dados estão criptografados: defina a mesma SYNC_KEY` | Falta a `SYNC_KEY` neste PC. |
 | `N arquivos sumiram deste PC ... --allow-delete` | A trava de remoção em massa disparou. Confira as junctions; se a remoção foi de propósito, rode com `--allow-delete`. |
-| `conflito em N arquivo(s)` | Os dois PCs mudaram o mesmo trecho. A versão perdedora está em `.sync_conflicts/`. |
+| `conflito em N arquivo(s): ficou a versão mais nova` | Dois PCs mudaram o mesmo trecho, ou um tinha uma cópia velha. A versão descartada está em `.sync_conflicts/`. |
+| `editado durante o sync, mantido como está` | Você editou o arquivo enquanto a rodada rodava. Nada foi sobrescrito; a próxima rodada mescla. |
 | `HTTP 401` | A chave pública deste PC não está em `CLIENT_PUBLIC_KEYS`, o `CLIENT_ID` não bate ou o relógio está muito errado (±5 min). |
 | `HTTP 415` / `formato antigo` | Cliente e server em versões diferentes. Atualize os dois (`git pull`) e reinicie o sync. |
 | `git push falhou` / `git clone falhou` (modo Git) | O `git` deste PC não consegue acessar o `GIT_REPO_URL`. Teste com `git ls-remote <url>`. |
@@ -276,6 +283,19 @@ requirements.txt
 ```
 
 Arquivos locais que **não** vão para o git: `.env`, `NEW_MEMORY/`, `SHARING_MEMORY/`, `.sync_repo/`, `.sync_conflicts/`, `.sync_trash/`, `.sync.lock` e `sync.log`.
+
+## Desenvolvimento
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+python -m pytest -q tests
+```
+
+Os testes cobrem o merge de 3 vias (`tests/test_merge3.py`) e rodadas completas entre vários PCs simulados (`tests/test_sync.py`): conflitos, cópias desatualizadas, edição durante o sync, remoções, templates, criptografia e o destino Git. Rodam no GitHub Actions em Windows, macOS e Linux.
+
+## Licença
+
+[MIT](LICENSE).
 
 ## Documentação completa e skill para o Claude
 

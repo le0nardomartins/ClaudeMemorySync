@@ -5,7 +5,7 @@
 - [Caminhos portáteis](#caminhos-portáteis)
 - [Merge de 3 vias](#merge-de-3-vias)
 - [Remoções](#remoções)
-- [Ordem e concorrência](#ordem-e-concorrência)
+- [Data de modificação, edição durante o sync e concorrência](#data-de-modificação-edição-durante-o-sync-e-concorrência)
 - [Criptografia](#criptografia)
 - [Destinos](#destinos)
 - [Protocolo com o server](#protocolo-com-o-server)
@@ -76,13 +76,16 @@ Os templates não são gravados de volta como arquivo. A rodada calcula a difere
 | L ausente, R mudou / R ausente, L mudou | Fica quem mudou (edição vence remoção) |
 | Texto mudado dos dois lados | Merge por linhas (abaixo) |
 | JSON mudado dos dois lados | Merge recursivo por chave; listas por item, como linhas |
-| Binário mudado dos dois lados | Conflito: fica L |
+| Binário mudado dos dois lados | Conflito: fica o mais novo |
+| Só um lado mudou, mas para um conteúdo mais **velho** que o arquivo do outro lado | Cópia desatualizada: fica o mais novo |
 
 **Texto.** Calcula os trechos alterados de cada lado em relação à base (`difflib`) e junta os que se sobrepõem:
 - trecho alterado só por um lado → aplica;
 - os dois deram o mesmo resultado → aplica uma vez;
-- os dois **só inseriram** no mesmo ponto → entram as duas inserções, primeiro a remota (o caso comum de acrescentar regras no fim do arquivo);
-- senão → **conflito**: fica a versão local, e a remota inteira vai para `.sync_conflicts/`.
+- os dois **só inseriram** no mesmo ponto → entram os dois blocos inteiros, primeiro o remoto (o caso comum de acrescentar uma seção no fim do arquivo). Nada é filtrado nem reordenado;
+- senão → **conflito**: fica o trecho do lado **mais novo** (data de modificação), e a versão inteira do outro lado vai para `.sync_conflicts/`.
+
+Sem base para o arquivo (PC novo, base apagada) e conteúdo diferente nos dois lados, não há como mesclar por linha sem duplicar: fica o arquivo mais novo inteiro.
 
 ## Remoções
 
@@ -95,12 +98,22 @@ Proteções:
 - **Lixeira:** arquivo removido por outro PC é movido para `.sync_trash/<data>/`, nunca apagado.
 - **Edição vence remoção:** se um PC apagou e o outro editou, o arquivo fica.
 
-## Ordem e concorrência
+## Data de modificação, edição durante o sync e concorrência
 
-Não há relógio de PC na decisão. A ordem é a **sequência de versões no destino**:
+**O mais novo sempre ganha.** Cada arquivo viaja com a sua data de modificação (`mtime` no manifesto). Ela decide:
+- o conflito real (os dois mudaram o mesmo trecho);
+- a **cópia desatualizada**: se um lado "mudou" um arquivo para um conteúdo mais velho que o do outro lado (mais de 2 s de diferença), essa mudança é descartada. É o que impede um PC que não recebeu a versão nova de espalhar a antiga.
+
+Para a data valer entre PCs, o arquivo recebido é gravado com a data da edição original (não com a hora em que chegou), e a cópia para a `NEW_MEMORY` preserva a data. Os relógios dos PCs precisam estar certos.
+
+**Edição durante o sync.** Entre ler a pasta e gravar o resultado podem passar alguns segundos (o server pode estar acordando). Logo antes de gravar cada arquivo, a rodada confere se ele ainda é o que foi lido. Se você editou nesse meio tempo, ele não é tocado, e a base volta à versão lida: a rodada seguinte vê "os dois mudaram" e mescla a sua edição com o que veio do outro PC.
+
+**Templates de config.** Depois de aplicar `settings.template.json` e `mcp.template.json` nos configs reais, a base guarda o template regerado deste PC. Diferenças que só existem num PC (ex.: caminho do `node.exe`) não ficam indo e voltando a cada rodada. Os templates são gravados sempre com LF, para terem o mesmo hash no Windows e no macOS/Linux.
+
+**Concorrência** (número da versão no destino):
 - todo envio diz `base` = a versão remota em que o merge se baseou, e `version = base + 1`;
 - o destino só aceita se `base` ainda for a versão mais nova (server: `409 conflict`; Git: push recusado). Senão, o PC busca a versão nova e refaz o merge;
-- num conflito real, ganha o PC que enviou depois, porque a mudança dele é a mais recente na ordem do destino.
+- o número da versão só impede que um PC envie em cima de uma versão que ele não viu. Quem ganha um conflito é decidido pela data de modificação, acima.
 
 ## Criptografia
 

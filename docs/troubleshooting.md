@@ -10,7 +10,8 @@ Comece pelo log: `sync.log` na raiz do projeto, quando roda pelo autostart, ou a
 | `enviar: versão N (... arquivos), X enviados` | As mudanças deste PC viraram a versão N. | Nada. |
 | `receber: N mudança(s) aplicada(s)` | Mudanças de outro PC foram aplicadas aqui. Itens com `-` na frente foram removidos (e estão em `.sync_trash/`). | Se vier MCP, plugin ou hook novo, veja [Depois de instalar](setup.md#depois-de-instalar). |
 | `enviar: outro PC enviou antes; buscando de novo` | Dois PCs sincronizaram ao mesmo tempo. Este busca a versão nova e refaz o merge. | Nada. |
-| `conflito em N arquivo(s), ficou a versão deste PC` | Os dois PCs mudaram o mesmo trecho. Ficou a versão deste PC (o último a chegar), e a outra foi guardada. | Se quiser a outra versão, ela está em `.sync_conflicts/<data>/`. Copie o que precisar e o próximo sync espalha. |
+| `conflito em N arquivo(s): ficou a versão mais nova` | Os dois PCs mudaram o mesmo trecho, ou um tinha uma cópia mais velha. Ficou a versão mais nova (data de modificação), e a outra foi guardada. A mensagem diz de qual PC era a descartada. |
+| `editado durante o sync, mantido como está (entra na próxima rodada)` | Você editou o arquivo enquanto a rodada rodava. O sync não gravou por cima. | Nada: a próxima rodada mescla a sua edição com o que veio do outro PC. | Se quiser a outra versão, ela está em `.sync_conflicts/<data>/`. Copie o que precisar e o próximo sync espalha. |
 | `N arquivos sumiram deste PC desde o último sync ... --allow-delete` | A trava de remoção em massa disparou: mais de 20% dos arquivos (e mais de 10) sumiram de uma vez. | Confira se as junctions de `~/.claude` estão inteiras. Se a remoção foi de propósito, rode `python src/main.py --allow-delete` uma vez. |
 | `não consegui decifrar: a SYNC_KEY deste PC é diferente da dos outros` | A `SYNC_KEY` do `.env` não bate. | Copie a `SYNC_KEY` certa de outro PC. |
 | `os dados estão criptografados: defina a mesma SYNC_KEY dos outros PCs` | Falta a `SYNC_KEY` neste PC. | Acrescente-a ao `.env`. |
@@ -49,7 +50,10 @@ Outro PC editou o arquivo depois que você o apagou (edição vence remoção). 
 O outro PC precisa enviar primeiro, e depois este precisa receber. Rode `python src/main.py` no outro PC e depois neste. No log do outro PC deve aparecer `enviar: versão N`.
 
 **Quero refazer a base do zero.**
-Apague `SHARING_MEMORY/` e rode `python src/main.py`. Sem base, nada é removido: o que só existe de um lado entra no outro, e arquivos diferentes são mesclados linha a linha.
+Apague `SHARING_MEMORY/` e rode `python src/main.py`. Sem base, nada é removido: o que só existe de um lado entra no outro, e arquivo diferente nos dois lados fica com a versão mais nova (a outra vai para `.sync_conflicts/`).
+
+**Uma edição minha foi trocada por uma versão antiga.**
+A versão descartada está em `.sync_conflicts/<data>/` (no PC que a descartou): copie de volta. Confira também se o relógio dos dois PCs está certo, já que o "mais novo" é decidido pela data de modificação.
 
 ### Trocar a SYNC_KEY
 

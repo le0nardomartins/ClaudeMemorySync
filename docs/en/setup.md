@@ -137,7 +137,7 @@ Repeat steps 2, 3, 5, 6 and 7 with a **different machine name** and the **same**
 On its first round, the new machine has no base yet, so everything is treated as "added on both sides":
 - what only it has is uploaded;
 - what only the backend has arrives here;
-- files that differ are merged line by line, with a conflict only where the same block differs.
+- a file that exists on both with different content keeps the **newest** whole version, and the other goes to `.sync_conflicts/`.
 
 Nothing is deleted on that first round.
 

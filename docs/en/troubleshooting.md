@@ -10,7 +10,8 @@ Start with the log: `sync.log` in the project root when running through autostar
 | `enviar: versão N (... arquivos), X enviados` | This machine's changes became version N. | Nothing. |
 | `receber: N mudança(s) aplicada(s)` | Changes from another machine were applied here. Items prefixed with `-` were deleted (and are in `.sync_trash/`). | If a new MCP server, plugin or hook came in, see [After installing](setup.md#after-installing). |
 | `enviar: outro PC enviou antes; buscando de novo` | Two machines synced at the same time. This one fetches the new version and redoes the merge. | Nothing. |
-| `conflito em N arquivo(s), ficou a versão deste PC` | Both machines changed the same block. This machine's version won (it arrived last), and the other was saved. | If you want the other version, it's in `.sync_conflicts/<date>/`. Copy what you need and the next sync spreads it. |
+| `conflito em N arquivo(s): ficou a versão mais nova` | Both machines changed the same block, or one had an older copy. The newest version (modification time) won, and the other was saved. The message says which machine the discarded one came from. |
+| `editado durante o sync, mantido como está (entra na próxima rodada)` | You edited the file while the round was running. The sync didn't write over it. | Nothing: the next round merges your edit with what came from the other machine. | If you want the other version, it's in `.sync_conflicts/<date>/`. Copy what you need and the next sync spreads it. |
 | `N arquivos sumiram deste PC desde o último sync ... --allow-delete` | The mass-deletion guard fired: more than 20% of the files (and more than 10) disappeared at once. | Check that the `~/.claude` junctions are intact. If the deletion was intentional, run `python src/main.py --allow-delete` once. |
 | `não consegui decifrar: a SYNC_KEY deste PC é diferente da dos outros` | The `SYNC_KEY` in `.env` doesn't match. | Copy the right `SYNC_KEY` from another machine. |
 | `os dados estão criptografados: defina a mesma SYNC_KEY dos outros PCs` | This machine has no `SYNC_KEY`. | Add it to `.env`. |
@@ -49,7 +50,10 @@ Another machine edited it after you deleted it (edit beats deletion). Delete it 
 The other machine has to send first, then this one has to receive. Run `python src/main.py` on the other machine, then here. Its log should show `enviar: versão N`.
 
 **I want to rebuild the base from scratch.**
-Delete `SHARING_MEMORY/` and run `python src/main.py`. With no base, nothing is deleted: what exists on only one side is added to the other, and differing files are merged line by line.
+Delete `SHARING_MEMORY/` and run `python src/main.py`. With no base, nothing is deleted: what exists on only one side is added to the other, and a file that differs keeps the newest version (the other goes to `.sync_conflicts/`).
+
+**One of my edits was replaced by an old version.**
+The discarded version is in `.sync_conflicts/<date>/` (on the machine that discarded it): copy it back. Also check that both machines' clocks are right, since "newest" is decided by modification time.
 
 ### Rotating the SYNC_KEY
 

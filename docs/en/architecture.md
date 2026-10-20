@@ -5,7 +5,7 @@
 - [Portable paths](#portable-paths)
 - [3-way merge](#3-way-merge)
 - [Deletions](#deletions)
-- [Ordering and concurrency](#ordering-and-concurrency)
+- [Modification time, edits during a sync, and concurrency](#modification-time-edits-during-a-sync-and-concurrency)
 - [Encryption](#encryption)
 - [Backends](#backends)
 - [Server protocol](#server-protocol)
@@ -76,13 +76,16 @@ Templates aren't written back as files. The round computes the difference betwee
 | L absent and R changed / R absent and L changed | Whoever changed it (edit beats deletion) |
 | Text changed on both sides | Line merge (below) |
 | JSON changed on both sides | Recursive per-key merge; lists per item, like lines |
-| Binary changed on both sides | Conflict: L wins |
+| Binary changed on both sides | Conflict: the newest wins |
+| Only one side changed, but to content **older** than the other side's file | Stale copy: the newest wins |
 
 **Text.** It computes each side's changed blocks relative to the base (`difflib`) and groups the ones that overlap:
 - a block changed by only one side → applied;
 - both sides produced the same result → applied once;
-- both sides **only inserted** at the same spot → both insertions are kept, the remote one first (the common case of appending rules at the end of a file);
-- otherwise → **conflict**: the local version stays, and the whole remote file goes to `.sync_conflicts/`.
+- both sides **only inserted** at the same spot → both blocks are kept whole, the remote one first (the common case of appending a section at the end of a file). Nothing is filtered or reordered;
+- otherwise → **conflict**: the block from the **newest** side (modification time) stays, and the other side's whole version goes to `.sync_conflicts/`.
+
+With no base for the file (new machine, deleted base) and different content on both sides, a line merge would duplicate content: the newest whole file wins.
 
 ## Deletions
 
@@ -95,12 +98,22 @@ Safeguards:
 - **Trash:** a file deleted by another machine is moved to `.sync_trash/<date>/`, never deleted.
 - **Edit beats deletion:** if one machine deleted a file and the other edited it, the file stays.
 
-## Ordering and concurrency
+## Modification time, edits during a sync, and concurrency
 
-No machine clock takes part in any decision. Order is the backend's **sequence of versions**:
+**The newest always wins.** Each file travels with its modification time (`mtime` in the manifest). It decides:
+- real conflicts (both sides changed the same block);
+- **stale copies**: if one side "changed" a file to content older than the other side's (by more than 2 s), that change is discarded. This stops a machine that never received the new version from spreading the old one.
+
+For times to be comparable across machines, a received file is written with the time of the original edit (not the time it arrived), and the copy into `NEW_MEMORY` preserves times. Machine clocks must be right.
+
+**Edits during a sync.** A few seconds can pass between reading the folder and writing the result (the server may be waking up). Right before writing each file, the round checks it is still what was read. If you edited it in the meantime, it isn't touched, and the base goes back to the version that was read: the next round sees "both changed" and merges your edit with what came from the other machine.
+
+**Config templates.** After `settings.template.json` and `mcp.template.json` are applied to the real configs, the base stores this machine's regenerated template. Differences that only exist on one machine (e.g. the `node.exe` path) don't bounce back and forth every round. Templates are always written with LF, so they hash the same on Windows and macOS/Linux.
+
+**Concurrency** (backend version number):
 - every upload states `base` = the remote version the merge was based on, and `version = base + 1`;
 - the backend only accepts it if `base` is still the newest version (server: `409 conflict`; Git: push rejected). Otherwise the machine fetches the new version and redoes the merge;
-- in a real conflict, the machine that uploads later wins, since its change is the most recent in the backend's order.
+- the version number only stops a machine from uploading on top of a version it hasn't seen. Who wins a conflict is decided by modification time, above.
 
 ## Encryption
 

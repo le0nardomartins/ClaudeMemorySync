@@ -32,6 +32,7 @@ Uso:
 
 import argparse
 import json
+import os
 import shutil
 import sys
 import time
@@ -89,13 +90,13 @@ def run_sync() -> None:
 def make_markdown_portable(root: Path) -> None:
     """Troca C:\\Users\\<usuário> por ~ nos .md copiados (os originais ficam intactos)."""
     for md in root.rglob("*.md"):
-        try:
-            text = md.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            continue
-        portable = sync_mod.portable_markdown(text)
-        if portable != text:
-            md.write_text(portable, encoding="utf-8")
+        data = md.read_bytes()
+        portable = sync_mod.portable_bytes(md.name, data)
+        if portable != data:
+            # Mantém a data de modificação original: é ela que decide quem ganha um conflito
+            st = md.stat()
+            md.write_bytes(portable)
+            os.utime(md, (st.st_atime, st.st_mtime))
 
 
 def copy_sharing() -> int:

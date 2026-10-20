@@ -4,11 +4,11 @@ saber quem mudou o quê, como o Git faz.
 
   - Só um lado mudou um trecho  -> entra a mudança desse lado (inclusive remoção).
   - Os dois mudaram igual        -> entra uma vez.
-  - Os dois só acrescentaram no mesmo ponto -> entram as duas inserções (não é conflito).
-  - Os dois mudaram diferente    -> CONFLITO: ganha `local` (este PC é o último a
-                                   chegar no server, então é a mudança mais recente
-                                   na ordem do server). Quem chama guarda a versão
-                                   perdedora para não sumir nada em silêncio.
+  - Os dois só acrescentaram no mesmo ponto -> entram os DOIS blocos inteiros, um depois do
+                                   outro (não é conflito; nada é reordenado nem deduplicado).
+  - Os dois mudaram diferente    -> CONFLITO: ganha o lado MAIS NOVO (data de modificação;
+                                   quem chama passa prefer_local). Quem chama guarda a
+                                   versão perdedora para não sumir nada em silêncio.
 
 Texto: por linhas. JSON: por chave (listas por item). Binário: arquivo inteiro.
 Ausência do arquivo é representada por None (permite propagar exclusões).
@@ -45,7 +45,7 @@ def _apply(base, start, end, hunks):
     return out + base[pos:end]
 
 
-def merge3_seq(base, local, remote):
+def merge3_seq(base, local, remote, prefer_local=True):
     """Merge de 3 vias de listas. Devolve (resultado, houve_conflito)."""
     events = sorted([(s, e, "l", r) for s, e, r in _hunks(base, local)] +
                     [(s, e, "r", r) for s, e, r in _hunks(base, remote)], key=lambda h: (h[0], h[1]))
@@ -66,12 +66,13 @@ def merge3_seq(base, local, remote):
             if a == b:
                 out += a
             elif all(s == e for s, e, _ in mine + theirs):
-                # Os dois só ACRESCENTARAM no mesmo ponto (ex.: regra nova no fim do arquivo):
-                # entram as duas, primeiro a que já estava no destino
-                out += b + [x for x in a if x not in b]
+                # Os dois só ACRESCENTARAM no mesmo ponto (ex.: seção nova no fim do arquivo):
+                # entram os dois blocos inteiros, primeiro o que já estava no destino.
+                # Não filtra linha a linha: isso comia linhas em branco e embaralhava listas.
+                out += b + a
             else:
                 conflict = True
-                out += a
+                out += a if prefer_local else b
         else:
             out += _apply(base, gs, ge, mine or theirs)
         pos = ge
@@ -81,7 +82,7 @@ def merge3_seq(base, local, remote):
 # ------------------------------------------------------------------ JSON
 
 
-def merge3_json(base, local, remote):
+def merge3_json(base, local, remote, prefer_local=True):
     """Merge de 3 vias de valores JSON. MISSING = chave ausente. Devolve (valor, conflito)."""
     if local == remote:
         return local, False
@@ -93,7 +94,8 @@ def merge3_json(base, local, remote):
         b = base if isinstance(base, dict) else {}
         out, conflict = {}, False
         for key in list(dict.fromkeys([*local, *remote])):
-            value, c = merge3_json(b.get(key, MISSING), local.get(key, MISSING), remote.get(key, MISSING))
+            value, c = merge3_json(b.get(key, MISSING), local.get(key, MISSING), remote.get(key, MISSING),
+                                   prefer_local)
             conflict |= c
             if value is not MISSING:
                 out[key] = value
@@ -104,14 +106,14 @@ def merge3_json(base, local, remote):
         for v in [*(base if isinstance(base, list) else []), *local, *remote]:
             items.setdefault(dump(v), v)
         merged, conflict = merge3_seq([dump(v) for v in (base if isinstance(base, list) else [])],
-                                      [dump(v) for v in local], [dump(v) for v in remote])
+                                      [dump(v) for v in local], [dump(v) for v in remote], prefer_local)
         return [items[k] for k in merged], conflict
-    # Mudou dos dois lados (ou um apagou e o outro mudou): fica o local
+    # Mudou dos dois lados (ou um apagou e o outro mudou)
     if local is MISSING:
         return remote, False          # alteração vence remoção
     if remote is MISSING:
         return local, False
-    return local, True
+    return (local if prefer_local else remote), True
 
 
 # ------------------------------------------------------------------ arquivo
@@ -124,10 +126,11 @@ def _text(data):
         return None
 
 
-def merge_file(rel: str, base, local, remote, sort_json: bool = False):
+def merge_file(rel: str, base, local, remote, sort_json: bool = False, prefer_local: bool = True):
     """
     Bytes (ou None = arquivo ausente) dos três lados -> (bytes | None, conflito).
     Alteração vence remoção: se um lado apagou e o outro mudou, o arquivo fica.
+    prefer_local: quem ganha um conflito real (True = este PC, que tem o arquivo mais novo).
     """
     if local == remote:
         return local, False
@@ -142,7 +145,7 @@ def merge_file(rel: str, base, local, remote, sort_json: bool = False):
 
     texts = [_text(x) if x is not None else "" for x in (base, local, remote)]
     if None in texts:
-        return local, True            # binário mudado dos dois lados
+        return (local if prefer_local else remote), True     # binário mudado dos dois lados
 
     if rel.lower().endswith(".json"):
         try:
@@ -150,12 +153,12 @@ def merge_file(rel: str, base, local, remote, sort_json: bool = False):
         except json.JSONDecodeError:
             parsed = None
         if parsed and parsed[1] is not MISSING and parsed[2] is not MISSING:
-            value, conflict = merge3_json(*parsed)
+            value, conflict = merge3_json(*parsed, prefer_local)
             out = json.dumps(value, indent=2, ensure_ascii=False, sort_keys=sort_json) + "\n"
             return out.encode("utf-8"), conflict
 
     lines = [t.splitlines(keepends=True) for t in texts]
-    merged, conflict = merge3_seq(*lines)
+    merged, conflict = merge3_seq(*lines, prefer_local)
     for i in range(len(merged) - 1):
         if not merged[i].endswith("\n"):
             merged[i] += "\n"
